@@ -1,0 +1,137 @@
+import { useEffect, useRef } from "react"
+import "./App.css"
+
+function App() {
+  const refVideo = useRef<HTMLVideoElement | null>(null)
+  const refCanvas = useRef<HTMLCanvasElement | null>(null)
+
+  const gaussianBlurArea = (
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number
+  ) => {
+    const imageData = context.getImageData(x, y, width, height)
+    const data = imageData.data
+    const w = imageData.width
+    const h = imageData.height
+
+    const weights = gaussianKernel(radius)
+    const side = Math.round(Math.sqrt(weights.length))
+    const halfSide = Math.floor(side / 2)
+
+    const newData = new Uint8ClampedArray(data.length)
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let r = 0,
+          g = 0,
+          b = 0,
+          a = 0
+        for (let ky = 0; ky < side; ky++) {
+          for (let kx = 0; kx < side; kx++) {
+            const scy = y + ky - halfSide
+            const scx = x + kx - halfSide
+            if (scy >= 0 && scy < h && scx >= 0 && scx < w) {
+              const srcPos = (scy * w + scx) * 4
+              const wt = weights[ky * side + kx]
+              r += data[srcPos] * wt
+              g += data[srcPos + 1] * wt
+              b += data[srcPos + 2] * wt
+              a += data[srcPos + 3] * wt
+            }
+          }
+        }
+        const dstPos = (y * w + x) * 4
+        newData[dstPos] = r
+        newData[dstPos + 1] = g
+        newData[dstPos + 2] = b
+        newData[dstPos + 3] = a
+      }
+    }
+    for (let i = 0; i < newData.length; i++) {
+      data[i] = newData[i]
+    }
+    context.putImageData(imageData, x, y)
+  }
+
+  const gaussianKernel = (radius: number): Float32Array => {
+    const sigma = radius / 3
+    const size = radius * 2 + 1
+    const kernel = new Float32Array(size * size)
+    let sum = 0
+    let i = 0
+    for (let y = -radius; y <= radius; y++) {
+      for (let x = -radius; x <= radius; x++) {
+        const value =
+          (1 / (2 * Math.PI * sigma * sigma)) *
+          Math.exp(-(x * x + y * y) / (2 * sigma * sigma))
+        kernel[i++] = value
+        sum += value
+      }
+    }
+    for (i = 0; i < kernel.length; i++) {
+      kernel[i] /= sum
+    }
+    return kernel
+  }
+
+  function drawCanvas() {
+    if (refVideo.current && refCanvas.current) {
+      setInterval(function () {
+        if (refVideo.current && refCanvas.current) {
+          const ctx = refCanvas.current.getContext("2d")
+          if (ctx) {
+            ctx.drawImage(refVideo.current, 0, 0, 320, 240)
+            // blurPartOfCanvas(ctx, 50, 50, 100, 100, 5) // Vị trí và kích thước phần cần làm mờ
+            gaussianBlurArea(ctx, 100, 100, 100, 100, 10)
+          }
+        }
+      }, 1000 / 30) // 1s / 30 fps
+    }
+  }
+
+  const setupWebcam = async () => {
+    if (refVideo.current) {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: {} })
+      refVideo.current.srcObject = stream
+      return new Promise((resolve) => {
+        if (refVideo.current) {
+          refVideo.current.onloadedmetadata = () => {
+            resolve(refVideo.current)
+          }
+        }
+      })
+    }
+  }
+
+  const main = async () => {
+    await setupWebcam()
+    drawCanvas()
+  }
+
+  useEffect(() => {
+    if (refVideo.current) {
+      main()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refVideo])
+
+  return (
+    <div>
+      <video ref={refVideo} width="320" height="240" autoPlay></video>
+
+      <canvas
+        ref={refCanvas}
+        width="320"
+        id="canvas"
+        height="240"
+        style={{ display: "inline" }}
+      ></canvas>
+    </div>
+  )
+}
+
+export default App
