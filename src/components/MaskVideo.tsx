@@ -1,33 +1,32 @@
 import { useCallback, useEffect, useRef } from "react"
-import "./App.css"
 import { gaussianBlurArea } from "./utils"
 
 type Props = {
   stream?: MediaStream
 }
 
+const w = 640
+const h = 480
+
 function MaskVideo(props: Props) {
   const refVideo = useRef<HTMLVideoElement | null>(null)
   const refCanvas = useRef<HTMLCanvasElement | null>(null)
   const refVideoFinal = useRef<HTMLVideoElement | null>(null)
+  const animationFrameId = useRef<number | null>(null)
 
-  function drawCanvas() {
+  const drawCanvas = () => {
     if (refVideo.current && refCanvas.current) {
-      setInterval(function () {
-        if (refVideo.current && refCanvas.current) {
-          const ctx = refCanvas.current.getContext("2d", {
-            willReadFrequently: true,
-          })
-          if (ctx) {
-            ctx.drawImage(refVideo.current, 0, 0, 320, 240)
-            gaussianBlurArea(ctx, 100, 100, 100, 100, 10)
-          }
-        }
-      }, 1000 / 30) // 1s / 30 fps
+      const ctx = refCanvas.current.getContext("2d", {
+        willReadFrequently: true,
+      })
+
+      if (ctx) {
+        ctx.drawImage(refVideo.current, 0, 0, w, h)
+        gaussianBlurArea(ctx, 200, 200, 200, 200, 10)
+      }
     }
   }
-
-  const setupWebcam = async () => {
+  const setupWebcam = useCallback(async () => {
     if (refVideo.current && props.stream) {
       refVideo.current.srcObject = props.stream
       return new Promise((resolve) => {
@@ -38,7 +37,7 @@ function MaskVideo(props: Props) {
         }
       })
     }
-  }
+  }, [props.stream])
 
   const startRecording = useCallback(() => {
     if (!refCanvas.current) return
@@ -49,34 +48,45 @@ function MaskVideo(props: Props) {
     }
   }, [])
 
-  const main = async () => {
+  const drawLoop = useCallback(() => {
+    drawCanvas()
+    animationFrameId.current = requestAnimationFrame(drawLoop)
+  }, [])
+
+  const main = useCallback(async () => {
     await setupWebcam()
     drawCanvas()
-    // startRecording()
-  }
+    drawLoop()
+    startRecording()
+  }, [drawLoop, setupWebcam, startRecording])
 
   useEffect(() => {
     if (refVideo.current && refCanvas.current && props.stream) {
       main()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refVideo, refCanvas && props.stream])
+
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current)
+      }
+    }
+  }, [props.stream, main])
 
   return (
     <div>
-      <video ref={refVideo} width="320" height="240" autoPlay></video>
+      <video ref={refVideo} width="640" height="480" autoPlay></video>
       <canvas
         ref={refCanvas}
-        width="320"
+        width="640"
         id="canvas"
-        height="240"
+        height="480"
         // className="display-none"
       ></canvas>
       <video
         className="ml-4"
         ref={refVideoFinal}
-        width="320"
-        height="240"
+        width="640"
+        height="480"
         autoPlay
         controls
       />
