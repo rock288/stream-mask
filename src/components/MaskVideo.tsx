@@ -13,10 +13,16 @@ function MaskVideo(props: Props) {
   const refCanvas = useRef<HTMLCanvasElement | null>(null)
   const animationFrameId = useRef<number | null>(null)
 
-  const detectObject = (ctx: CanvasRenderingContext2D) => {
-    ctx.getImageData(0, 0, w, h)
-    gaussianBlurArea(ctx, 100, 100, 200, 200, 10)
-  }
+  const detectObject = useCallback(() => {
+    if (refVideo.current && refCanvas.current) {
+      const ctx = refCanvas.current.getContext("2d", {
+        willReadFrequently: true,
+      })
+      if (ctx) {
+        gaussianBlurArea(ctx, 100, 100, 200, 200, 15)
+      }
+    }
+  }, [])
 
   const drawCanvas = useCallback(() => {
     if (refVideo.current && refCanvas.current) {
@@ -26,7 +32,6 @@ function MaskVideo(props: Props) {
 
       if (ctx) {
         ctx.drawImage(refVideo.current, 0, 0, w, h)
-        detectObject(ctx)
       }
     }
   }, [])
@@ -67,12 +72,18 @@ function MaskVideo(props: Props) {
     animationFrameId.current = requestAnimationFrame(drawLoop)
   }, [drawCanvas])
 
+  const drawMask = useCallback(() => {
+    detectObject()
+    animationFrameId.current = requestAnimationFrame(drawMask)
+  }, [detectObject])
+
   const main = useCallback(async () => {
+    if (!refCanvas.current) return
     await setupWebcam()
-    drawCanvas()
     drawLoop()
+    drawMask()
     startStreamCanvas()
-  }, [drawCanvas, drawLoop, setupWebcam, startStreamCanvas])
+  }, [drawLoop, setupWebcam, startStreamCanvas, drawMask])
 
   useEffect(() => {
     if (refVideo.current && refCanvas.current && props.stream) {
